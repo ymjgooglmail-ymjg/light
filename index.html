@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>尾牙控場同步系統</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; transition: background-color 0.3s ease; }
+        #controls { position: fixed; top: 0; left: 0; background: rgba(255,255,255,0.8); padding: 10px; display: none; z-index: 100; border-bottom-right-radius: 10px; }
+        .color-btn { width: 50px; height: 50px; margin: 5px; border: 2px solid #333; cursor: pointer; border-radius: 5px; }
+        #status { position: fixed; bottom: 10px; left: 10px; color: white; font-size: 12px; font-family: sans-serif; opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <div style="margin-bottom: 5px; font-weight: bold;">主控台</div>
+        <button class="color-btn" style="background: red;" onclick="sendColor('red')"></button>
+        <button class="color-btn" style="background: blue;" onclick="sendColor('blue')"></button>
+        <button class="color-btn" style="background: green;" onclick="sendColor('green')"></button>
+        <button class="color-btn" style="background: yellow;" onclick="sendColor('yellow')"></button>
+        <button class="color-btn" style="background: white;" onclick="sendColor('white')"></button>
+        <button class="color-btn" style="background: black;" onclick="sendColor('black')"></button>
+    </div>
+
+    <div id="status">正在連線至控制中心...</div>
+
+    <script>
+        // --- 設定區 ---
+        const ABLY_API_KEY = 'YOUR_ABLY_API_KEY_HERE'; // 貼上你的 Ably API Key
+        const ably = new Ably.Realtime(ABLY_API_KEY);
+        const channel = ably.channels.get('tail-gate-party');
+
+        // --- 判斷是否為主控端 ---
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('admin')) {
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('status').innerText = '主控模式已啟動';
+        }
+
+        // --- 接收顏色更新 ---
+        channel.subscribe('colorChange', function(message) {
+            document.body.style.backgroundColor = message.data;
+            document.getElementById('status').innerText = '同步成功: ' + message.data;
+        });
+
+        // --- 發送顏色更新 ---
+        function sendColor(color) {
+            channel.publish('colorChange', color);
+        }
+
+        // 連線成功提示
+        ably.connection.on('connected', () => {
+            if (!urlParams.has('admin')) document.getElementById('status').innerText = '已連線，請等待控場指令';
+        });
+    </script>
+</body>
+</html>
