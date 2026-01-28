@@ -6,54 +6,137 @@
     <title>尾牙控場同步系統</title>
     <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; transition: background-color 0.3s ease; }
-        #controls { position: fixed; top: 0; left: 0; background: rgba(255,255,255,0.8); padding: 10px; display: none; z-index: 100; border-bottom-right-radius: 10px; }
-        .color-btn { width: 50px; height: 50px; margin: 5px; border: 2px solid #333; cursor: pointer; border-radius: 5px; }
-        #status { position: fixed; bottom: 10px; left: 10px; color: white; font-size: 12px; font-family: sans-serif; opacity: 0.5; }
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background-color: #000; 
+            transition: background-color 0.4s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* 主控面板樣式 */
+        #admin-panel { 
+            position: fixed; 
+            top: 20px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; 
+            display: none; 
+            z-index: 100; 
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .color-btn { 
+            width: 70px; 
+            height: 70px; 
+            border: 2px solid #ccc; 
+            cursor: pointer; 
+            border-radius: 10px; 
+            transition: transform 0.1s;
+        }
+        
+        .color-btn:active { transform: scale(0.9); }
+
+        /* 狀態文字 */
+        #status { 
+            color: white; 
+            font-size: 16px; 
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
-    <div id="controls">
-        <div style="margin-bottom: 5px; font-weight: bold;">主控台</div>
-        <button class="color-btn" style="background: red;" onclick="sendColor('red')"></button>
-        <button class="color-btn" style="background: blue;" onclick="sendColor('blue')"></button>
-        <button class="color-btn" style="background: green;" onclick="sendColor('green')"></button>
-        <button class="color-btn" style="background: yellow;" onclick="sendColor('yellow')"></button>
-        <button class="color-btn" style="background: white;" onclick="sendColor('white')"></button>
-        <button class="color-btn" style="background: black;" onclick="sendColor('black')"></button>
+    <div id="admin-panel">
+        <div style="margin-bottom: 15px; color: #333; font-weight: bold;">主控台</div>
+        <div class="btn-grid">
+            <button class="color-btn" style="background: #FF0000;" onclick="sendColor('#FF0000')"></button>
+            <button class="color-btn" style="background: #0000FF;" onclick="sendColor('#0000FF')"></button>
+            <button class="color-btn" style="background: #00FF00;" onclick="sendColor('#00FF00')"></button>
+            <button class="color-btn" style="background: #FFFF00;" onclick="sendColor('#FFFF00')"></button>
+            <button class="color-btn" style="background: #FFFFFF;" onclick="sendColor('#FFFFFF')"></button>
+            <button class="color-btn" style="background: #000000;" onclick="sendColor('#000000')"></button>
+        </div>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">點擊顏色，40台手機同步變色</p>
     </div>
 
     <div id="status">正在連線至控制中心...</div>
 
     <script>
-        // --- 設定區 ---
-        const ABLY_API_KEY = 'OgA8YQ.h0NtCA:vA6KEaTcvzkkuUDe0uzogBsR9T7JMuYM4K-Xwj4jb_M'; // 貼上你的 Ably API Key
-        const ably = new Ably.Realtime(ABLY_API_KEY);
+        // ================= 設定區 =================
+        const ABLY_API_KEY = 'cZshyg.HmG5Qw:R51peiFlUSI93TYcNN2gM7BlsvgGGAVFVQoaK62naGo'; // <--- 請在此貼上你的 Ably Root Key
+        // ==========================================
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAdmin = urlParams.has('admin');
+
+        // 初始化 Ably
+        const ably = new Ably.Realtime({ key: ABLY_API_KEY });
         const channel = ably.channels.get('tail-gate-party');
 
-        // --- 判斷是否為主控端 ---
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('admin')) {
-            document.getElementById('controls').style.display = 'block';
-            document.getElementById('status').innerText = '主控模式已啟動';
-        }
-
-        // --- 接收顏色更新 ---
-        channel.subscribe('colorChange', function(message) {
-            document.body.style.backgroundColor = message.data;
-            document.getElementById('status').innerText = '同步成功: ' + message.data;
-        });
-
-        // --- 發送顏色更新 ---
-        function sendColor(color) {
-            channel.publish('colorChange', color);
-        }
-
-        // 連線成功提示
+        // 監控連線狀態
         ably.connection.on('connected', () => {
-            if (!urlParams.has('admin')) document.getElementById('status').innerText = '已連線，請等待控場指令';
+            console.log("Connected to Ably");
+            document.getElementById('status').innerText = isAdmin ? "控制端已就緒" : "已連線，請等待控場指令";
+            if (isAdmin) {
+                document.getElementById('admin-panel').style.display = 'block';
+                document.getElementById('status').style.display = 'none';
+            }
         });
+
+        ably.connection.on('failed', (err) => {
+            alert("連線失敗，請檢查 Key 是否正確：" + err.reason.message);
+        });
+
+        // 接收顏色變化 (所有手機都會執行這段)
+        channel.subscribe('colorChange', function(message) {
+            const newColor = message.data;
+            document.body.style.backgroundColor = newColor;
+            
+            // 如果變白色或黃色，狀態文字改黑色才看得到
+            const statusText = document.getElementById('status');
+            if (newColor === '#FFFFFF' || newColor === '#FFFF00') {
+                statusText.style.color = 'black';
+            } else {
+                statusText.style.color = 'white';
+            }
+            
+            if (!isAdmin) {
+                statusText.innerText = "同步成功！";
+                // 3秒後隱藏文字，達成純色效果
+                setTimeout(() => { statusText.style.opacity = '0'; }, 3000);
+            }
+        });
+
+        // 發送顏色變化 (只有主控端點擊按鈕時執行)
+        function sendColor(color) {
+            channel.publish('colorChange', color, (err) => {
+                if (err) alert("發送指令失敗：" + err.message);
+            });
+        }
+
+        // 提醒防止螢幕休眠
+        if (!isAdmin) {
+            console.log("建議使用者將螢幕自動鎖定設為「永不」");
+        }
     </script>
 </body>
 </html>
