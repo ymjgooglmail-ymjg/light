@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>尾牙控場 Pro Max - 跑馬燈版</title>
+    <title>尾牙控場 Ultimate</title>
     <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <style>
         body, html { 
@@ -15,32 +15,33 @@
         }
 
         /* 閃爍動畫 */
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0; }
-            100% { opacity: 1; }
-        }
-        .blinking { animation: blink var(--speed) infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+        .blinking { animation: blink var(--blink-speed) infinite; }
 
-        /* 跑馬燈動畫 */
+        /* 跑馬燈容器 - 修正 Android 顯示問題 */
         #marquee-container {
             position: absolute;
-            width: 100%;
+            width: 100vw;
             white-space: nowrap;
-            display: none; /* 預設隱藏 */
+            overflow: visible;
+            visibility: hidden; /* 使用 visibility 替代 display 以確保動畫預載 */
             z-index: 5;
         }
+        .show-marquee { visibility: visible !important; }
+
+        /* 跑馬燈動畫 */
         #marquee-text {
             display: inline-block;
-            font-size: 15vh; /* 字體大小隨螢幕高度調整 */
+            font-size: 18vh;
             font-weight: bold;
             color: white;
-            text-shadow: 2px 2px 10px rgba(0,0,0,0.5);
-            animation: marquee 5s linear infinite;
+            padding-left: 100%; /* 確保從右側外開始 */
+            animation: marquee var(--marquee-speed) linear infinite;
         }
+
         @keyframes marquee {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-200%); } /* 增加位移確保完全穿過畫面 */
         }
 
         /* 主控面板 */
@@ -49,13 +50,10 @@
             padding: 15px; display: none; z-index: 100; border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 85%; max-width: 350px; text-align: center;
         }
-        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
-        .color-btn { width: 100%; aspect-ratio: 1; border: 1px solid #ddd; cursor: pointer; border-radius: 8px; }
-        .ctrl-row { margin: 10px 0; border-top: 1px solid #eee; padding-top: 10px; font-size: 13px; color: #333; }
-        input[type="range"], input[type="text"] { width: 100%; box-sizing: border-box; margin-top: 5px; }
-        
-        #status { color: white; font-size: 14px; background: rgba(0,0,0,0.4); padding: 8px 15px; border-radius: 20px; z-index: 10; }
-        #fs-notice { position: fixed; bottom: 20px; color: yellow; font-size: 12px; }
+        .ctrl-row { margin: 8px 0; border-top: 1px solid #eee; padding-top: 8px; font-size: 12px; color: #333; }
+        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 5px; }
+        .color-btn { width: 100%; aspect-ratio: 1; border: 1px solid #ddd; border-radius: 5px; }
+        input[type="range"] { width: 100%; }
     </style>
 </head>
 <body onclick="enableFullscreen()">
@@ -65,38 +63,33 @@
     </div>
 
     <div id="admin-panel">
-        <div style="font-weight: bold; margin-bottom: 8px;">燈光與跑馬燈控制</div>
-        
+        <div style="font-weight: bold; margin-bottom: 5px;">燈光控制</div>
         <div class="btn-grid">
-            <button class="color-btn" style="background: #FF0000;" onclick="sendColor('#FF0000')"></button>
-            <button class="color-btn" style="background: #FFD700;" onclick="sendColor('#FFD700')"></button>
-            <button class="color-btn" style="background: #0000FF;" onclick="sendColor('#0000FF')"></button>
-            <button class="color-btn" style="background: #000000;" onclick="sendColor('#000000')"></button>
+            <button class="color-btn" style="background: red;" onclick="sendColor('red')"></button>
+            <button class="color-btn" style="background: gold;" onclick="sendColor('gold')"></button>
+            <button class="color-btn" style="background: blue;" onclick="sendColor('blue')"></button>
+            <button class="color-btn" style="background: black;" onclick="sendColor('black')"></button>
         </div>
 
         <div class="ctrl-row">
-            <label>閃爍速度：<span id="speedVal">1.0</span>s</label>
-            <input type="range" id="speedRange" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
-            <button onclick="toggleBlink(true)" style="background:#e74c3c; color:white; border:none; padding:5px; margin-top:5px; border-radius:5px;">啟動閃爍</button>
-            <button onclick="toggleBlink(false)" style="background:#95a5a6; color:white; border:none; padding:5px; margin-top:5px; border-radius:5px;">停止閃爍</button>
+            閃爍速度：<span id="blinkVal">1.0</span>s
+            <input type="range" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateBlink(this.value)">
+            <button onclick="toggleBlink(true)">啟動</button> <button onclick="toggleBlink(false)">停止</button>
         </div>
 
         <div class="ctrl-row">
-            <label>跑馬燈文字：</label>
-            <input type="text" id="marqueeInput" placeholder="輸入文字，例如：恭喜發財">
-            <div style="margin-top:5px;">
-                <button onclick="sendMarquee(true)" style="background:#2ecc71; color:white; border:none; padding:5px 10px; border-radius:5px;">開啟文字</button>
-                <button onclick="sendMarquee(false)" style="background:#95a5a6; color:white; border:none; padding:5px 10px; border-radius:5px;">關閉文字</button>
-            </div>
+            文字內容：<input type="text" id="mInput" placeholder="輸入文字" style="width:70%">
+            <br>文字速度：<span id="mSpeedVal">5</span>s (越小越快)
+            <input type="range" min="1" max="15" step="1" value="5" oninput="updateMSpeed(this.value)">
+            <button onclick="sendMarquee(true)" style="background:#2ecc71; color:white;">開啟文字</button>
+            <button onclick="sendMarquee(false)">關閉</button>
         </div>
     </div>
 
-    <div id="status">點擊畫面進入全螢幕並連線...</div>
-    <div id="fs-notice">※ 點擊螢幕可進入全螢幕模式</div>
+    <div id="status">點擊畫面進入全螢幕...</div>
 
     <script>
         const ABLY_API_KEY = 'cZshyg.HmG5Qw:R51peiFlUSI93TYcNN2gM7BlsvgGGAVFVQoaK62naGo'; 
-
         const urlParams = new URLSearchParams(window.location.search);
         const isAdmin = urlParams.has('admin');
         const ably = new Ably.Realtime({ key: ABLY_API_KEY });
@@ -104,54 +97,59 @@
 
         function enableFullscreen() {
             if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(e => console.log("Fullscreen blocked"));
-                document.getElementById('fs-notice').style.display = 'none';
+                document.documentElement.requestFullscreen().catch(e => {});
             }
         }
 
         ably.connection.on('connected', () => {
-            document.getElementById('status').innerText = isAdmin ? "控制端就緒" : "連線成功，等待指令";
+            document.getElementById('status').innerText = isAdmin ? "控制端就緒" : "等待連線...";
             if (isAdmin) document.getElementById('admin-panel').style.display = 'block';
         });
 
         // 發送端
-        function sendColor(color) { channel.publish('change', { type: 'color', val: color }); }
-        function toggleBlink(state) { channel.publish('change', { type: 'blink', val: state }); }
-        function updateSpeed(val) {
-            document.getElementById('speedVal').innerText = val;
-            channel.publish('change', { type: 'speed', val: val + 's' });
+        function sendColor(c) { channel.publish('ev', { t: 'c', v: c }); }
+        function toggleBlink(s) { channel.publish('ev', { t: 'b', v: s }); }
+        function updateBlink(v) { 
+            document.getElementById('blinkVal').innerText = v;
+            channel.publish('ev', { t: 'bs', v: v + 's' }); 
         }
-        function sendMarquee(show) {
-            const text = document.getElementById('marqueeInput').value || "恭喜大獎！";
-            channel.publish('change', { type: 'marquee', val: { show: show, text: text } });
+        function updateMSpeed(v) {
+            document.getElementById('mSpeedVal').innerText = v;
+            channel.publish('ev', { t: 'ms', v: v + 's' });
+        }
+        function sendMarquee(s) {
+            const txt = document.getElementById('mInput').value || "恭喜大獎！";
+            channel.publish('ev', { t: 'm', v: { s: s, t: txt } });
         }
 
         // 接收端
-        channel.subscribe('change', function(message) {
-            const data = message.data;
-            const marqueeContainer = document.getElementById('marquee-container');
-            const marqueeText = document.getElementById('marquee-text');
+        channel.subscribe('ev', function(m) {
+            const d = m.data;
+            const mc = document.getElementById('marquee-container');
+            const mt = document.getElementById('marquee-text');
 
-            if (data.type === 'color') {
-                document.body.style.backgroundColor = data.val;
-                document.getElementById('status').style.color = (data.val === '#FFFFFF' || data.val === '#FFD700') ? 'black' : 'white';
-                marqueeText.style.color = (data.val === '#FFFFFF' || data.val === '#FFD700') ? 'black' : 'white';
-            } else if (data.type === 'blink') {
-                if (data.val) document.body.classList.add('blinking');
-                else document.body.classList.remove('blinking');
-            } else if (data.type === 'speed') {
-                document.body.style.setProperty('--speed', data.val);
-            } else if (data.type === 'marquee') {
-                if (data.val.show) {
-                    marqueeText.innerText = data.val.text;
-                    marqueeContainer.style.display = 'block';
+            if (d.t === 'c') {
+                document.body.style.backgroundColor = d.v;
+                mt.style.color = (d.v === 'gold' || d.v === 'white') ? 'black' : 'white';
+            } else if (d.t === 'b') {
+                d.v ? document.body.classList.add('blinking') : document.body.classList.remove('blinking');
+            } else if (d.t === 'bs') {
+                document.body.style.setProperty('--blink-speed', d.v);
+            } else if (d.t === 'ms') {
+                document.body.style.setProperty('--marquee-speed', d.v);
+            } else if (d.t === 'm') {
+                if (d.v.s) {
+                    mt.innerText = d.v.t;
+                    mc.classList.add('show-marquee');
                 } else {
-                    marqueeContainer.style.display = 'none';
+                    mc.classList.remove('show-marquee');
                 }
             }
         });
 
-        document.body.style.setProperty('--speed', '1s');
+        // 初始化變數
+        document.body.style.setProperty('--blink-speed', '1s');
+        document.body.style.setProperty('--marquee-speed', '5s');
     </script>
 </body>
 </html>
