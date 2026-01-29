@@ -3,75 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>尾牙控場 Pro 版</title>
+    <title>尾牙控場 Pro Max</title>
     <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; transition: background-color 0.4s ease; display: flex; justify-content: center; align-items: center; font-family: sans-serif; }
-        
-        #admin-panel { 
-            position: fixed; top: 20px; background: rgba(255, 255, 255, 0.95); 
-            padding: 15px; display: none; z-index: 100; border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 85%; max-width: 400px; text-align: center;
+        /* 基本樣式 */
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background-color: #000; 
+            transition: background-color 0.3s ease; 
+            display: flex; justify-content: center; align-items: center; 
+            font-family: sans-serif; touch-action: manipulation;
         }
 
-        /* 顏色按鈕網格 */
-        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
+        /* 閃爍動畫定義 */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .blinking { animation: blink var(--speed) infinite; }
+
+        /* 主控面板 */
+        #admin-panel { 
+            position: fixed; top: 10px; background: rgba(255, 255, 255, 0.95); 
+            padding: 15px; display: none; z-index: 100; border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 85%; max-width: 350px; text-align: center;
+        }
+
+        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
         .color-btn { width: 100%; aspect-ratio: 1; border: 1px solid #ddd; cursor: pointer; border-radius: 8px; }
 
-        /* 自由調色盤 */
-        .picker-area { border-top: 1px solid #eee; pt: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-        input[type="color"] { width: 50px; height: 50px; border: none; cursor: pointer; background: none; }
-
-        #status { color: white; font-size: 14px; background: rgba(0,0,0,0.4); padding: 8px 15px; border-radius: 20px; }
+        /* 控制列 */
+        .ctrl-row { margin: 10px 0; border-top: 1px solid #eee; padding-top: 10px; font-size: 13px; color: #333; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        
+        #status { color: white; font-size: 14px; background: rgba(0,0,0,0.4); padding: 8px 15px; border-radius: 20px; z-index: 10; }
+        #fs-notice { position: fixed; bottom: 20px; color: yellow; font-size: 12px; }
     </style>
 </head>
-<body>
+<body onclick="enableFullscreen()">
 
     <div id="admin-panel">
-        <div style="margin-bottom: 10px; font-weight: bold; color: #333;">快速選色</div>
+        <div style="font-weight: bold; margin-bottom: 8px;">顏色切換</div>
         <div class="btn-grid">
             <button class="color-btn" style="background: #FF0000;" onclick="sendColor('#FF0000')"></button>
             <button class="color-btn" style="background: #FFD700;" onclick="sendColor('#FFD700')"></button>
             <button class="color-btn" style="background: #FF00FF;" onclick="sendColor('#FF00FF')"></button>
-            <button class="color-btn" style="background: #800080;" onclick="sendColor('#800080')"></button>
             <button class="color-btn" style="background: #0000FF;" onclick="sendColor('#0000FF')"></button>
-            <button class="color-btn" style="background: #00FFFF;" onclick="sendColor('#00FFFF')"></button>
-            <button class="color-btn" style="background: #00FF00;" onclick="sendColor('#00FF00')"></button>
-            <button class="color-btn" style="background: #FFFFFF;" onclick="sendColor('#FFFFFF')"></button>
         </div>
 
-        <div class="picker-area">
-            <span style="font-size: 13px; color: #666;">自訂顏色：</span>
-            <input type="color" id="colorPicker" onchange="sendColor(this.value)">
-            <button onclick="sendColor('#000000')" style="padding: 5px 10px;">全黑(關燈)</button>
+        <div class="ctrl-row">
+            <label>閃爍速度 (秒)：<span id="speedVal">1.0</span>s</label><br>
+            <input type="range" id="speedRange" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
+            <button onclick="toggleBlink(true)" style="margin-top:5px; background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px;">啟動閃爍</button>
+            <button onclick="toggleBlink(false)" style="margin-top:5px; background: #95a5a6; color: white; border: none; padding: 5px 10px; border-radius: 5px;">停止閃爍</button>
+        </div>
+        
+        <div class="ctrl-row">
+            自訂色：<input type="color" onchange="sendColor(this.value)">
+            <button onclick="sendColor('#000000')">全黑關燈</button>
         </div>
     </div>
 
-    <div id="status">正在連線...</div>
+    <div id="status">點擊畫面進入全螢幕並連線...</div>
+    <div id="fs-notice">※ 點擊任何地方可進入全螢幕模式</div>
 
     <script>
-        const ABLY_API_KEY = 'cZshyg.HmG5Qw:R51peiFlUSI93TYcNN2gM7BlsvgGGAVFVQoaK62naGo'; 
+        // --- 設定區 ---
+        const ABLY_API_KEY = 'YOUR_ABLY_KEY_HERE'; 
+        // --------------
+
         const urlParams = new URLSearchParams(window.location.search);
         const isAdmin = urlParams.has('admin');
-
         const ably = new Ably.Realtime({ key: ABLY_API_KEY });
         const channel = ably.channels.get('tail-gate-party');
 
+        // Android 全螢幕修正功能
+        function enableFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.log(e));
+                document.getElementById('fs-notice').style.display = 'none';
+            }
+        }
+
         ably.connection.on('connected', () => {
-            document.getElementById('status').innerText = isAdmin ? "控制端就緒" : "已連線，等待控場...";
+            document.getElementById('status').innerText = isAdmin ? "控制端就緒" : "連線成功，等待控場...";
             if (isAdmin) document.getElementById('admin-panel').style.display = 'block';
         });
 
+        // 發送端功能
         function sendColor(color) {
-            channel.publish('colorChange', color);
+            channel.publish('change', { type: 'color', val: color });
         }
 
-        channel.subscribe('colorChange', function(message) {
-            const color = message.data;
-            document.body.style.backgroundColor = color;
-            // 自動切換文字顏色，避免看不見
-            document.getElementById('status').style.color = (color === '#FFFFFF' || color === '#FFD700') ? 'black' : 'white';
+        function toggleBlink(state) {
+            channel.publish('change', { type: 'blink', val: state });
+        }
+
+        function updateSpeed(val) {
+            document.getElementById('speedVal').innerText = val;
+            channel.publish('change', { type: 'speed', val: val + 's' });
+        }
+
+        // 接收端功能
+        channel.subscribe('change', function(message) {
+            const data = message.data;
+            if (data.type === 'color') {
+                document.body.style.backgroundColor = data.val;
+                document.getElementById('status').style.color = (data.val === '#FFFFFF' || data.val === '#FFD700') ? 'black' : 'white';
+            } else if (data.type === 'blink') {
+                if (data.val) document.body.classList.add('blinking');
+                else document.body.classList.remove('blinking');
+            } else if (data.type === 'speed') {
+                document.body.style.setProperty('--speed', data.val);
+            }
         });
+
+        // 預設速度
+        document.body.style.setProperty('--speed', '1s');
     </script>
 </body>
 </html>
